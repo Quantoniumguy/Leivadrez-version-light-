@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<header>
+    <div class="turnoJugadores">
+        <h1 id="turno"></h1>
+    </div> <!-- Muestra el turno -->
+</header>
+
+
+<body>
+    <div id="container">
+        <div id="capturadasBlancas" class="capturadas">
+            <h2>Piezas capturadas (Negras)</h2>
+            <div id="piezasNegras"></div> <!-- Aquí se mostrarán las piezas capturadas de las blancas -->
+        </div>
+        <canvas id="ajedrezCanvas" width="800" height="800"></canvas>
+        <div id="capturadasNegras" class="capturadas">
+            <h2>Piezas capturadas (Blancas)</h2>
+            <div id="piezasBlancas"></div> <!-- Aquí se mostrarán las piezas capturadas de las negras -->
+        </div>
+    </div>
+    
+    <script src="funciones.js"></script>
+</body>
+</html>
