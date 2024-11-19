@@ -8,24 +8,77 @@ const COLUMNAS = 8;
 const ANCHO_CELDA = WIDTH / FILAS;
 const ALTURA_CELDA = HEIGHT / COLUMNAS;
 
-const socket = new WebSocket("ws://localhost:12345");
+let socket = new WebSocket("ws://localhost:12345");
+let miColor = null;
+let esMiTurno = false;
 
-socket.onopen = function() {
-    console.log("Conexión establecida con el servidor");
+socket.onopen = function(event) {
+    console.log("Conectado al servidor de WebSocket.");
 };
 
-socket.onerror = function(error) {
-    console.log("Error en la conexión WebSocket:", error);
-};
-
+// Mensajes del servidor
 socket.onmessage = function(event) {
-    const response = JSON.parse(event.data);
-    console.log("Respuesta del servidor:", response);
+    let data = JSON.parse(event.data);
+    
+    if (data.message) {
+        // Inicialización del jugador
+        console.log(data.message);
+        if (data.message.includes("Jugador 1")) {
+            miColor = "blanco";
+            esMiTurno = true; // Jugador 1 empieza
+        } else if (data.message.includes("Jugador 2")) {
+            miColor = "negro";
+        }
+    }
+    
+    if (data.type === "movimiento") {
+        // Actualizar el tablero con el movimiento recibido
+        actualizarTablero(data.origen, data.destino, data.pieza, data.color);
+        
+        // Cambiar turno
+        esMiTurno = (data.turno !== miColor);
+    }
+    
+    if (data.error) {
+        // Mostrar errores si los hay
+        console.error("Error del servidor:", data.error);
+    }
 };
 
-socket.onclose = function() {
-    console.log("Conexión cerrada");
-};
+// Función para enviar el movimiento
+function enviarMovimiento(origen, destino, pieza, color) {
+    const origenId = `${origen.x}_${origen.y}`;  // Crear el ID de origen
+    const destinoId = `${destino.x}_${destino.y}`;  // Crear el ID de destino
+
+    const mensaje = {
+        type: 'movimiento',
+        origen: origenId,
+        destino: destinoId,
+        pieza: pieza,
+        color: color
+    };
+
+    // Enviar el mensaje al servidor
+    socket.send(JSON.stringify(mensaje));
+}
+
+
+function actualizarTablero(origen, destino, pieza, color) {
+    // Asegurarse de que las celdas existen en el DOM
+    const casillaOrigen = document.getElementById(origen);
+    const casillaDestino = document.getElementById(destino);
+
+    if (casillaOrigen && casillaDestino) {
+        // Mover la pieza visualmente
+        casillaDestino.innerHTML = casillaOrigen.innerHTML;  // Copiar la pieza de la casilla de origen a destino
+        casillaOrigen.innerHTML = '';  // Limpiar la casilla de origen
+    } else {
+        console.error('Las celdas no se encontraron:', origen, destino);
+    }
+}
+
+
+
 
 const colores = {
     light: '#FF7F50',
@@ -46,6 +99,17 @@ const piezas = {
     caballo: ['♞', '♘'],
     peon: ['♟', '♙'],
 };
+
+const tablero = [
+    ['♜', '♞', '♝', '♛', '♚', '♝', '♞', '♜'],  // Fila 1
+    ['♙', '♙', '♙', '♙', '♙', '♙', '♙', '♙'],  // Fila 2
+    ['', '', '', '', '', '', '', ''],  // Fila 3
+    ['', '', '', '', '', '', '', ''],  // Fila 4
+    ['', '', '', '', '', '', '', ''],  // Fila 5
+    ['', '', '', '', '', '', '', ''],  // Fila 6
+    ['♟', '♟', '♟', '♟', '♟', '♟', '♟', '♟'],  // Fila 7
+    ['♖', '♘', '♗', '♕', '♔', '♗', '♘', '♖'],  // Fila 8
+];
 
 // Turno inicial: blancas empiezan
 let turnoActual = 'blanco';
@@ -393,69 +457,67 @@ const getSafeKingMoves = (kingPosition) => {
 // Modificar la detección de click para permitir solo movimientos seguros
 $canvas.addEventListener('click', (event) => {
     const rect = $canvas.getBoundingClientRect();
-    const xPos = event.clientX - rect.left; // Posición horizontal del mouse
-    const yPos = event.clientY - rect.top;  // Posición vertical del mouse
+    const xPos = event.clientX - rect.left;
+    const yPos = event.clientY - rect.top;
 
     // Convertir las posiciones del mouse a coordenadas de la celda
     const x = Math.floor(xPos / ANCHO_CELDA);
     const y = Math.floor(yPos / ALTURA_CELDA);
 
-    // Verificar si hay una pieza en la celda
+    // Verificar si hay una pieza en la celda seleccionada
     const piezaSeleccionada = boardMatrix[x][y];
+
     if (piezaSeleccionada) {
         console.log(`Pieza seleccionada: ${piezaSeleccionada.type} en (${x}, ${y})`);
         
-        // Definir un destino para la pieza (esto es solo un ejemplo)
-        const destino = { x: x + 1, y: y };  // Por ejemplo, moverla una celda hacia abajo
+        if (puedeMoverPieza(piezaSeleccionada)) {
+            selectedPiece = piezaSeleccionada;
+            selectedPosition = { x, y };
 
-        // Enviar el mensaje al servidor con origen, destino, pieza, y color
-        const mensaje = {
-            type: "movimiento",
-            origen: { x: x, y: y },
-            destino: destino,  // Aquí agregamos el destino
-            pieza: piezaSeleccionada,
-            color: piezaSeleccionada.color
-        };
-        
-        // Enviar el mensaje al servidor a través de WebSocket
-        socket.send(JSON.stringify(mensaje));
-    }
-
-    if (piezaSeleccionada && puedeMoverPieza(piezaSeleccionada)) {
-        // Si el rey está en jaque, solo puede moverse a lugares seguros
-        if (isInCheck(turnoActual) && piezaSeleccionada.type === piezas.rey) {
-            const movimientosSeguros = getSafeKingMoves({ x, y });
-            renderBoard(movimientosSeguros); // Resaltar solo movimientos seguros
-        } else {
-            const movimientosPosibles = getPossibleMoves(x, y);
-            renderBoard(movimientosPosibles); // Resaltar movimientos posibles normales
+            // Si el rey está en jaque, solo mostrar los movimientos seguros
+            if (isInCheck(turnoActual)) {
+                const movimientosSeguros = getSafeKingMoves({ x, y });
+                renderBoard(movimientosSeguros); // Resaltar solo movimientos seguros
+            } else {
+                const movimientosPosibles = getPossibleMoves(x, y);
+                renderBoard(movimientosPosibles); // Resaltar movimientos posibles normales
+            }
         }
-        selectedPiece = piezaSeleccionada;
-        selectedPosition = { x, y };
     } else if (selectedPiece) {
-        const newPosX = x;
-        const newPosY = y;
-
-        const validMove = getPossibleMoves(selectedPosition.x, selectedPosition.y).some(move => move.x === newPosX && move.y === newPosY);
+        // Intentar mover la pieza seleccionada
+        const validMove = getPossibleMoves(selectedPosition.x, selectedPosition.y)
+            .some(move => move.x === x && move.y === y);
 
         if (validMove) {
-            const piezaCapturada = boardMatrix[newPosX][newPosY];
+            const piezaCapturada = boardMatrix[x][y];
             if (piezaCapturada) {
-                agregarPiezaCapturada(piezaCapturada);
+                agregarPiezaCapturada(piezaCapturada); // Si hay pieza capturada, agregarla
             }
 
-            boardMatrix[newPosX][newPosY] = selectedPiece;
+            // Mover la pieza en el tablero
+            boardMatrix[x][y] = selectedPiece;
             boardMatrix[selectedPosition.x][selectedPosition.y] = null;
-            cambiarTurno();
-        }
 
-        selectedPiece = null;
-        selectedPosition = null;
-        renderBoard(); // Redibuja el tablero
+            // Cambiar turno y enviar movimiento al servidor
+            cambiarTurno();
+            const mensaje = {
+                type: "movimiento",
+                origen: selectedPosition,
+                destino: { x, y },
+                pieza: selectedPiece,
+                color: selectedPiece.color
+            };
+            socket.send(JSON.stringify(mensaje));
+
+            selectedPiece = null;
+            selectedPosition = null;
+            renderBoard(); // Redibujar el tablero después del movimiento
+        }
     } else {
-        renderBoard(); // Redibuja el tablero si no se selecciona ninguna pieza
+        renderBoard(); // Redibujar el tablero si no se selecciona ninguna pieza
     }
 });
+
 
 function moverPieza(movimiento) {
     // Obtener las coordenadas de inicio y fin
